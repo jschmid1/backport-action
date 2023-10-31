@@ -25,6 +25,8 @@ export type Config = {
   commits: {
     merge_commits: "fail" | "skip";
   };
+  copy_milestone: boolean;
+  copy_assignees: boolean;
 };
 
 enum Output {
@@ -257,6 +259,33 @@ export class Backport {
           }
           const new_pr = new_pr_response.data;
 
+          console.error("copy_milestone: " + this.config.copy_milestone + " " + typeof this.config.copy_milestone)
+          if (this.config.copy_milestone == true) {
+            const milestone = mainpr.milestone?.title;
+            // QQ: get milestone from `this.getMilestone` or via the mainpr object?
+            console.info("Setting milestone to " + milestone)
+            const set_milestone_response = await this.github.setMilestone(
+              new_pr.number,
+              milestone
+            );
+            if (set_milestone_response.status != 200) {
+                console.error(JSON.stringify(set_milestone_response));
+            }
+          }
+
+          console.error("copy_assignees: " + this.config.copy_assignees + " " + typeof this.config.copy_assignees)
+          if (this.config.copy_assignees == true) {
+            const assignees = this.findAssignees(mainpr);
+            // QQ: get milestone from `this.getAssignees` or via the mainpr object?
+            console.info("Setting assignees to " + assignees)
+            const set_assignee_response = await this.github.setAssignees(
+              new_pr.number, assignees
+            );
+            if (set_assignee_response.status != 200) {
+                console.error(JSON.stringify(set_assignee_response));
+            }
+          }
+
           if (labelsToCopy.length > 0) {
             const label_response = await this.github.labelPR(
               new_pr.number,
@@ -268,28 +297,6 @@ export class Backport {
             }
           }
 
-          // TODO: add a configurable option to copy the milestone
-          const milestone = mainpr.milestone?.title;
-          // QQ: get milestone from `this.getMilestone` or via the mainpr object?
-          console.info("Setting milestone to " + milestone)
-          const set_milestone_response = await this.github.setMilestone(
-            new_pr.number,
-            milestone
-          );
-          if (set_milestone_response.status != 200) {
-              console.error(JSON.stringify(set_milestone_response));
-          }
-
-          // TODO: add a configurable option to copy the assignees
-          const assignees = this.findAssignees(mainpr);
-          // QQ: get milestone from `this.getAssignees` or via the mainpr object?
-          console.info("Setting assignees to " + assignees)
-          const set_assignee_response = await this.github.setAssignees(
-            new_pr.number, assignees
-          );
-          if (set_assignee_response.status != 200) {
-              console.error(JSON.stringify(set_assignee_response));
-          }
 
           const message = this.composeMessageForSuccess(new_pr.number, target);
           successByTarget.set(target, true);

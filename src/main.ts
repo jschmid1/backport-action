@@ -18,6 +18,8 @@ async function run(): Promise<void> {
   const copy_labels_pattern = core.getInput("copy_labels_pattern");
   const target_branches = core.getInput("target_branches");
   const merge_commits = core.getInput("merge_commits");
+  const copy_assignees = core.getInput("copy_assignees");
+  const copy_milestone = core.getInput("copy_milestone");
 
   if (merge_commits != "fail" && merge_commits != "skip") {
     const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
@@ -36,6 +38,8 @@ async function run(): Promise<void> {
       copy_labels_pattern === "" ? undefined : new RegExp(copy_labels_pattern),
     target_branches: target_branches === "" ? undefined : target_branches,
     commits: { merge_commits },
+    copy_assignees: copy_assignees === "true",
+    copy_milestone: copy_milestone === "true",
   };
   const backport = new Backport(github, config, git);
 
