@@ -271,6 +271,7 @@ export class Backport {
           // TODO: add a configurable option to copy the milestone
           const milestone = mainpr.milestone?.title;
           // QQ: get milestone from `this.getMilestone` or via the mainpr object?
+          console.info("Setting milestone to " + milestone)
           const set_milestone_response = await this.github.setMilestone(
             new_pr.number,
             milestone
@@ -282,6 +283,7 @@ export class Backport {
           // TODO: add a configurable option to copy the assignees
           const assignees = this.findAssignees(mainpr);
           // QQ: get milestone from `this.getAssignees` or via the mainpr object?
+          console.info("Setting assignees to " + assignees)
           const set_assignee_response = await this.github.setAssignees(
             new_pr.number, assignees
           );
