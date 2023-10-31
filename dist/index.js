@@ -59,7 +59,7 @@ class Backport {
         this.git = git;
     }
     run() {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const payload = this.github.getPayload();
@@ -216,6 +216,26 @@ class Backport {
                             continue;
                         }
                         const new_pr = new_pr_response.data;
+                        console.error("copy_milestone: " + this.config.copy_milestone + " " + typeof this.config.copy_milestone);
+                        if (this.config.copy_milestone == true) {
+                            const milestone = (_e = mainpr.milestone) === null || _e === void 0 ? void 0 : _e.title;
+                            // QQ: get milestone from `this.getMilestone` or via the mainpr object?
+                            console.info("Setting milestone to " + milestone);
+                            const set_milestone_response = yield this.github.setMilestone(new_pr.number, milestone);
+                            if (set_milestone_response.status != 200) {
+                                console.error(JSON.stringify(set_milestone_response));
+                            }
+                        }
+                        console.error("copy_assignees: " + this.config.copy_assignees + " " + typeof this.config.copy_assignees);
+                        if (this.config.copy_assignees == true) {
+                            const assignees = this.findAssignees(mainpr);
+                            // QQ: get milestone from `this.getAssignees` or via the mainpr object?
+                            console.info("Setting assignees to " + assignees);
+                            const set_assignee_response = yield this.github.setAssignees(new_pr.number, assignees);
+                            if (set_assignee_response.status != 200) {
+                                console.error(JSON.stringify(set_assignee_response));
+                            }
+                        }
                         if (labelsToCopy.length > 0) {
                             const label_response = yield this.github.labelPR(new_pr.number, labelsToCopy);
                             if (label_response.status != 200) {
@@ -262,6 +282,12 @@ class Backport {
             }
         });
     }
+    // get the assignees from the `main_pr` object or use the api?
+    // the api should be cleaner to avoid breakages in the API
+    findAssignees(mainpr) {
+        console.log("Finding assignees...");
+        return mainpr.assignees.map((label) => label.login);
+    }
     findTargetBranches(mainpr, config) {
         const labels = mainpr.labels.map((label) => label.name);
         return findTargetBranches(config, labels, mainpr.head.ref);
@@ -307,7 +333,7 @@ class Backport {
         return (0, dedent_1.default) `Git push to origin failed for ${target} with exitcode ${exitcode}`;
     }
     composeMessageForCreatePRFailed(response) {
-        return (0, dedent_1.default) `Backport branch created but failed to create PR. 
+        return (0, dedent_1.default) `Backport branch created but failed to create PR.
                 Request to create PR rejected with status ${response.status}.
 
                 (see action log for full response)`;
@@ -621,6 +647,34 @@ class Github {
             return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues.addLabels(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr, labels }));
         });
     }
+    setAssignees(pr, assignees) {
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log(`Set Assignees ${assignees} to #${pr}`);
+            return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues.addAssignees(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr, assignees }));
+        });
+    }
+    setMilestone(pr, milestone) {
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log(`Set Milestone ${milestone} to #${pr}`);
+            return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues.update(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr, milestone: milestone }));
+        });
+    }
+    getMilestone(pr) {
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log(`Get milestone for PR #${pr}`);
+            return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues
+                .get(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr }))
+                .then((response) => response.data.milestone);
+        });
+    }
+    getAssignees(pr) {
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log(`Get assignees for PR #${pr}`);
+            return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues
+                .listAssignees(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr }))
+                .then((response) => response.data.map((assignee) => assignee.login));
+        });
+    }
 }
 exports.Github = Github;
 _Github_octokit = new WeakMap(), _Github_context = new WeakMap();
@@ -686,6 +740,8 @@ function run() {
         const copy_labels_pattern = core.getInput("copy_labels_pattern");
         const target_branches = core.getInput("target_branches");
         const merge_commits = core.getInput("merge_commits");
+        const copy_assignees = core.getInput("copy_assignees");
+        const copy_milestone = core.getInput("copy_milestone");
         if (merge_commits != "fail" && merge_commits != "skip") {
             const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
             console.error(message);
@@ -701,6 +757,8 @@ function run() {
             copy_labels_pattern: copy_labels_pattern === "" ? undefined : new RegExp(copy_labels_pattern),
             target_branches: target_branches === "" ? undefined : target_branches,
             commits: { merge_commits },
+            copy_assignees: copy_assignees === "true",
+            copy_milestone: copy_milestone === "true",
         };
         const backport = new backport_1.Backport(github, config, git);
         return backport.run();
