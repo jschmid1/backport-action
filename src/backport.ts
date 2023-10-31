@@ -268,6 +268,27 @@ export class Backport {
             }
           }
 
+          // TODO: add a configurable option to copy the milestone
+          const milestone = mainpr.milestone?.title;
+          // QQ: get milestone from `this.getMilestone` or via the mainpr object?
+          const set_milestone_response = await this.github.setMilestone(
+            new_pr.number,
+            milestone
+          );
+          if (set_milestone_response.status != 200) {
+              console.error(JSON.stringify(set_milestone_response));
+          }
+
+          // TODO: add a configurable option to copy the assignees
+          const assignees = this.findAssignees(mainpr);
+          // QQ: get milestone from `this.getAssignees` or via the mainpr object?
+          const set_assignee_response = await this.github.setAssignees(
+            new_pr.number, assignees
+          );
+          if (set_assignee_response.status != 200) {
+              console.error(JSON.stringify(set_assignee_response));
+          }
+
           const message = this.composeMessageForSuccess(new_pr.number, target);
           successByTarget.set(target, true);
           await this.github.createComment({
@@ -304,6 +325,13 @@ export class Backport {
         );
       }
     }
+  }
+
+  // get the assignees from the `main_pr` object or use the api?
+  // the api should be cleaner to avoid breakages in the API
+  private findAssignees(mainpr: PullRequest): string[] {
+    console.log("Finding assignees...")
+    return mainpr.assignees.map((label) => label.login);
   }
 
   private findTargetBranches(mainpr: PullRequest, config: Config): string[] {
@@ -377,7 +405,7 @@ export class Backport {
   private composeMessageForCreatePRFailed(
     response: CreatePullRequestResponse,
   ): string {
-    return dedent`Backport branch created but failed to create PR. 
+    return dedent`Backport branch created but failed to create PR.
                 Request to create PR rejected with status ${response.status}.
 
                 (see action log for full response)`;
