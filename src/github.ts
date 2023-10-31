@@ -20,6 +20,10 @@ export interface GithubApi {
   createPR(pr: CreatePullRequest): Promise<CreatePullRequestResponse>;
   labelPR(pr: number, labels: string[]): Promise<LabelPullRequestResponse>;
   requestReviewers(request: ReviewRequest): Promise<RequestReviewersResponse>;
+  getAssignees(pr: number): Promise<string[]>;
+  getMilestone(pr: number): Promise<{ number: number } | null>;
+  setAssignees(pr: number, assignees: string[]): Promise<GenericResponse>;
+  setMilestone(pr: number, milestone: string): Promise<GenericResponse>;
 }
 
 export class Github implements GithubApi {
@@ -126,6 +130,44 @@ export class Github implements GithubApi {
       labels,
     });
   }
+
+  public async setAssignees(pr: number, assignees: string[]) {
+    console.log(`Set Assignees ${assignees} to #${pr}`);
+    return this.#octokit.rest.issues.addAssignees({
+      ...this.getRepo(),
+      issue_number: pr,
+      assignees,
+    });
+  }
+
+  public async setMilestone(pr: number, milestone: string) {
+    console.log(`Set Milestone ${milestone} to #${pr}`);
+    return this.#octokit.rest.issues.update({
+      ...this.getRepo(),
+      issue_number: pr,
+      milestone: milestone,
+    });
+  }
+
+  public async getMilestone(pr: number) {
+    console.log(`Get milestone for PR #${pr}`);
+    return this.#octokit.rest.issues
+      .get({
+        ...this.getRepo(),
+        issue_number: pr,
+      })
+      .then((response) => response.data.milestone);
+  }
+
+  public async getAssignees(pr: number) {
+    console.log(`Get assignees for PR #${pr}`);
+    return this.#octokit.rest.issues
+      .listAssignees({
+        ...this.getRepo(),
+        issue_number: pr,
+      })
+      .then((response) => response.data.map((assignee) => assignee.login));
+  }
 }
 
 export type PullRequest = {
@@ -149,6 +191,18 @@ export type PullRequest = {
     login: string;
   }[];
   commits: number;
+  milestone: {
+    number: number;
+    id: number;
+    title: string;
+  },
+  assignees: {
+    login: string;
+    id: number;
+  }[],
+  merged_by: {
+    login: string;
+  }
 };
 export type CreatePullRequestResponse = {
   status: number;
@@ -158,6 +212,11 @@ export type CreatePullRequestResponse = {
   };
 };
 export type RequestReviewersResponse = CreatePullRequestResponse;
+
+export type GenericResponse = {
+  status: number;
+};
+
 export type LabelPullRequestResponse = {
   status: number;
 };
