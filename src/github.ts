@@ -23,7 +23,7 @@ export interface GithubApi {
   getAssignees(pr: number): Promise<string[]>;
   getMilestone(pr: number): Promise<{ number: number } | null>;
   setAssignees(pr: number, assignees: string[]): Promise<GenericResponse>;
-  setMilestone(pr: number, milestone: string): Promise<GenericResponse>;
+  setMilestone(pr: number, milestone: number): Promise<GenericResponse>;
 }
 
 export class Github implements GithubApi {
@@ -140,7 +140,7 @@ export class Github implements GithubApi {
     });
   }
 
-  public async setMilestone(pr: number, milestone: string) {
+  public async setMilestone(pr: number, milestone: number) {
     console.log(`Set Milestone ${milestone} to #${pr}`);
     return this.#octokit.rest.issues.update({
       ...this.getRepo(),

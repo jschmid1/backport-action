@@ -261,7 +261,7 @@ export class Backport {
 
           console.error("copy_milestone: " + this.config.copy_milestone + " " + typeof this.config.copy_milestone)
           if (this.config.copy_milestone == true) {
-            const milestone = mainpr.milestone?.title;
+            const milestone = mainpr.milestone?.id;
             // QQ: get milestone from `this.getMilestone` or via the mainpr object?
             console.info("Setting milestone to " + milestone)
             const set_milestone_response = await this.github.setMilestone(
