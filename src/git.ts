@@ -109,7 +109,7 @@ export class Git {
   ) {
     // https://[TOKEN]@github.com/[REPO-OWNER]/[REPO-NAME]
     // TODO: will the token get leaked when someone enables debug logging?
-    var remote_url = `https://${this.token}@github.com/${repo}.git`;
+    var remote_url = `https://${this.token}@github.com/${repo}`;
     const { exitCode } = await this.git(
       "remote",
       ["add", remote_name, remote_url],

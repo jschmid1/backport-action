@@ -423,7 +423,7 @@ class Git {
         return __awaiter(this, void 0, void 0, function* () {
             // https://[TOKEN]@github.com/[REPO-OWNER]/[REPO-NAME]
             // TODO: will the token get leaked when someone enables debug logging?
-            var remote_url = `https://${this.token}@github.com/${repo}.git`;
+            var remote_url = `https://${this.token}@github.com/${repo}`;
             const { exitCode } = yield this.git("remote", ["add", remote_name, remote_url], pwd);
             // TODO: when defaulting to remote, we can skip this and ignore the errror
             if (exitCode !== 0) {
