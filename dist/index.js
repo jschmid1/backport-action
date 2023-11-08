@@ -408,7 +408,7 @@ class Git {
     }
     push(branchname, remote = "origin", pwd) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { exitCode } = yield this.git("push", ["--set-upstream", remote, branchname], pwd);
+            const { exitCode } = yield this.git("push", ["-f", remote, branchname], pwd);
             return exitCode;
         });
     }

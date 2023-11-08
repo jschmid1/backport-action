@@ -89,7 +89,7 @@ export class Git {
   ) {
     const { exitCode } = await this.git(
       "push",
-      ["--set-upstream", remote, branchname],
+      ["-f", remote, branchname],
       pwd,
     );
     return exitCode;
