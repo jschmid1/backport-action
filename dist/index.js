@@ -42,7 +42,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.findTargetBranches = exports.Backport = void 0;
+exports.Backport = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const dedent_1 = __importDefault(__nccwpck_require__(5281));
 const git_1 = __nccwpck_require__(3374);
@@ -59,7 +59,7 @@ class Backport {
         this.git = git;
     }
     run() {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d;
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const payload = this.github.getPayload();
@@ -79,7 +79,10 @@ class Backport {
                     });
                     return;
                 }
-                const target_branches = this.findTargetBranches(mainpr, this.config);
+                // TODO: this should be configurable, hardcoding for now
+                // This should check the lookup table if there is one, otherwise this will
+                // default to the same name as source branch
+                const target_branches = ["master"];
                 if (target_branches.length === 0) {
                     console.log(`Nothing to backport: no 'target_branches' specified and none of the labels match the backport pattern '${(_c = this.config.labels.pattern) === null || _c === void 0 ? void 0 : _c.source}'`);
                     return; // nothing left to do here
@@ -112,150 +115,38 @@ class Backport {
                     commitShasToCherryPick = nonMergeCommitShas;
                 }
                 console.log("Will cherry-pick the following commits: " + commitShasToCherryPick);
-                let labelsToCopy = [];
-                if (typeof this.config.copy_labels_pattern !== "undefined") {
-                    let copyLabelsPattern = this.config.copy_labels_pattern;
-                    labelsToCopy = mainpr.labels
-                        .map((label) => label.name)
-                        .filter((label) => label.match(copyLabelsPattern) &&
-                        (this.config.labels.pattern === undefined ||
-                            !label.match(this.config.labels.pattern)));
-                }
-                console.log(`Will copy labels matching ${this.config.copy_labels_pattern}. Found matching labels: ${labelsToCopy}`);
+                // remote logic starts here
+                // TODO: this should be configurable, hardcoding for now
+                let target = target_branches[0];
                 const successByTarget = new Map();
-                for (const target of target_branches) {
-                    console.log(`Backporting to target branch '${target}...'`);
-                    try {
-                        yield this.git.fetch(target, this.config.pwd, 1);
-                    }
-                    catch (error) {
-                        if (error instanceof git_1.GitRefNotFoundError) {
-                            const message = this.composeMessageForFetchTargetFailure(error.ref);
-                            console.error(message);
-                            successByTarget.set(target, false);
-                            yield this.github.createComment({
-                                owner,
-                                repo,
-                                issue_number: pull_number,
-                                body: message,
-                            });
-                            continue;
-                        }
-                        else {
-                            throw error;
-                        }
-                    }
-                    try {
-                        const branchname = `backport-${pull_number}-to-${target}`;
-                        console.log(`Start backport to ${branchname}`);
-                        try {
-                            yield this.git.checkout(branchname, `origin/${target}`, this.config.pwd);
-                        }
-                        catch (error) {
-                            const message = this.composeMessageForBackportScriptFailure(target, 3, baseref, headref, branchname);
-                            console.error(message);
-                            successByTarget.set(target, false);
-                            yield this.github.createComment({
-                                owner,
-                                repo,
-                                issue_number: pull_number,
-                                body: message,
-                            });
-                            continue;
-                        }
-                        try {
-                            yield this.git.cherryPick(commitShasToCherryPick, this.config.pwd);
-                        }
-                        catch (error) {
-                            const message = this.composeMessageForBackportScriptFailure(target, 4, baseref, headref, branchname);
-                            console.error(message);
-                            successByTarget.set(target, false);
-                            yield this.github.createComment({
-                                owner,
-                                repo,
-                                issue_number: pull_number,
-                                body: message,
-                            });
-                            continue;
-                        }
-                        console.info(`Push branch to origin`);
-                        const pushExitCode = yield this.git.push(branchname, this.config.pwd);
-                        if (pushExitCode != 0) {
-                            const message = this.composeMessageForGitPushFailure(target, pushExitCode);
-                            console.error(message);
-                            successByTarget.set(target, false);
-                            yield this.github.createComment({
-                                owner,
-                                repo,
-                                issue_number: pull_number,
-                                body: message,
-                            });
-                            continue;
-                        }
-                        console.info(`Create PR for ${branchname}`);
-                        const { title, body } = this.composePRContent(target, mainpr);
-                        const new_pr_response = yield this.github.createPR({
+                let upstream_name = "upstream";
+                console.log(`Backporting to target branch '${target} to remote '${upstream_name}'`);
+                try {
+                    yield this.git.add_remote(this.config.upstream_repo, upstream_name, this.config.pwd);
+                }
+                catch (error) {
+                    if (error instanceof Error) {
+                        console.error(error.message);
+                        successByTarget.set(target, false);
+                        yield this.github.createComment({
                             owner,
                             repo,
-                            title,
-                            body,
-                            head: branchname,
-                            base: target,
-                            maintainer_can_modify: true,
+                            issue_number: pull_number,
+                            body: error.message,
                         });
-                        if (new_pr_response.status != 201) {
-                            console.error(JSON.stringify(new_pr_response));
-                            successByTarget.set(target, false);
-                            const message = this.composeMessageForCreatePRFailed(new_pr_response);
-                            yield this.github.createComment({
-                                owner,
-                                repo,
-                                issue_number: pull_number,
-                                body: message,
-                            });
-                            continue;
-                        }
-                        const new_pr = new_pr_response.data;
-                        if (this.config.copy_milestone == true) {
-                            const milestone = (_e = mainpr.milestone) === null || _e === void 0 ? void 0 : _e.number;
-                            if (milestone) {
-                                console.info("Setting milestone to " + milestone);
-                                const set_milestone_response = yield this.github.setMilestone(new_pr.number, milestone);
-                                if (set_milestone_response.status != 200) {
-                                    console.error(JSON.stringify(set_milestone_response));
-                                }
-                            }
-                        }
-                        if (this.config.copy_assignees == true) {
-                            const assignees = mainpr.assignees.map((label) => label.login);
-                            if (assignees.length > 0) {
-                                console.info("Setting assignees " + assignees);
-                                const set_assignee_response = yield this.github.setAssignees(new_pr.number, assignees);
-                                if (set_assignee_response.status != 201) {
-                                    console.error(JSON.stringify(set_assignee_response));
-                                }
-                            }
-                        }
-                        if (this.config.copy_requested_reviewers == true) {
-                            const reviewers = (_f = mainpr.requested_reviewers) === null || _f === void 0 ? void 0 : _f.map((reviewer) => reviewer.login);
-                            if ((reviewers === null || reviewers === void 0 ? void 0 : reviewers.length) > 0) {
-                                console.info("Setting reviewers " + reviewers);
-                                const reviewRequest = Object.assign(Object.assign({}, this.github.getRepo()), { pull_number: new_pr.number, reviewers: reviewers });
-                                const set_reviewers_response = yield this.github.requestReviewers(reviewRequest);
-                                if (set_reviewers_response.status != 201) {
-                                    console.error(JSON.stringify(set_reviewers_response));
-                                }
-                            }
-                        }
-                        if (labelsToCopy.length > 0) {
-                            const label_response = yield this.github.labelPR(new_pr.number, labelsToCopy);
-                            if (label_response.status != 200) {
-                                console.error(JSON.stringify(label_response));
-                                // The PR was still created so let's still comment on the original.
-                            }
-                        }
-                        const message = this.composeMessageForSuccess(new_pr.number, target);
-                        successByTarget.set(target, true);
+                    }
+                    else {
+                        throw error;
+                    }
+                }
+                try {
+                    yield this.git.fetch(target, this.config.pwd, 1, upstream_name);
+                }
+                catch (error) {
+                    if (error instanceof git_1.GitRefNotFoundError) {
+                        const message = this.composeMessageForFetchTargetFailure(error.ref);
+                        console.error(message);
+                        successByTarget.set(target, false);
                         yield this.github.createComment({
                             owner,
                             repo,
@@ -263,20 +154,102 @@ class Backport {
                             body: message,
                         });
                     }
+                    else {
+                        throw error;
+                    }
+                }
+                try {
+                    const branchname = `backport-${pull_number}-to-${target}-to-${upstream_name}`;
+                    console.log(`Start backport to ${branchname}`);
+                    try {
+                        yield this.git.checkout(branchname, target, upstream_name, this.config.pwd);
+                    }
                     catch (error) {
-                        if (error instanceof Error) {
-                            console.error(error.message);
-                            successByTarget.set(target, false);
-                            yield this.github.createComment({
-                                owner,
-                                repo,
-                                issue_number: pull_number,
-                                body: error.message,
-                            });
-                        }
-                        else {
-                            throw error;
-                        }
+                        const message = this.composeMessageForBackportScriptFailure(target, 3, baseref, headref, branchname);
+                        console.error(message);
+                        successByTarget.set(target, false);
+                        yield this.github.createComment({
+                            owner,
+                            repo,
+                            issue_number: pull_number,
+                            body: message,
+                        });
+                    }
+                    try {
+                        yield this.git.cherryPick(commitShasToCherryPick, this.config.pwd);
+                    }
+                    catch (error) {
+                        const message = this.composeMessageForBackportScriptFailure(target, 4, baseref, headref, branchname);
+                        console.error(message);
+                        successByTarget.set(target, false);
+                        yield this.github.createComment({
+                            owner,
+                            repo,
+                            issue_number: pull_number,
+                            body: message,
+                        });
+                    }
+                    console.info(`Push branch to ${upstream_name}`);
+                    const pushExitCode = yield this.git.push(branchname, upstream_name, this.config.pwd);
+                    if (pushExitCode != 0) {
+                        const message = this.composeMessageForGitPushFailure(target, pushExitCode);
+                        console.error(message);
+                        successByTarget.set(target, false);
+                        yield this.github.createComment({
+                            owner,
+                            repo,
+                            issue_number: pull_number,
+                            body: message,
+                        });
+                    }
+                    console.info(`Create PR for ${branchname}`);
+                    const { title, body } = this.composePRContent(target, mainpr);
+                    // TODO: source this from the upstream_url config var (or get that form the github api)
+                    // let owner = "jschmid1";
+                    // let repo = "backport-testing-fork"
+                    const new_pr_response = yield this.github.createPR({
+                        owner: "jschmid1",
+                        repo: "backport-testing-fork",
+                        title,
+                        body,
+                        head: branchname,
+                        base: target,
+                        maintainer_can_modify: true,
+                    });
+                    if (new_pr_response.status != 201) {
+                        console.error(JSON.stringify(new_pr_response));
+                        successByTarget.set(target, false);
+                        const message = this.composeMessageForCreatePRFailed(new_pr_response);
+                        yield this.github.createComment({
+                            owner,
+                            repo,
+                            issue_number: pull_number,
+                            body: message,
+                        });
+                    }
+                    const new_pr = new_pr_response.data;
+                    const message = this.composeMessageForSuccess(new_pr.number, target);
+                    successByTarget.set(target, true);
+                    yield this.github.createComment({
+                        owner,
+                        repo,
+                        issue_number: pull_number,
+                        body: message,
+                    });
+                }
+                catch (error) {
+                    if (error instanceof Error) {
+                        console.error(error.message);
+                        successByTarget.set(target, false);
+                        yield this.github.createComment({
+                            owner,
+                            repo,
+                            issue_number: pull_number,
+                            body: error.message,
+                        });
+                    }
+                    else {
+                        throw error;
                     }
                 }
                 this.createOutput(successByTarget);
@@ -292,10 +265,6 @@ class Backport {
                 }
             }
         });
-    }
-    findTargetBranches(mainpr, config) {
-        const labels = mainpr.labels.map((label) => label.name);
-        return findTargetBranches(config, labels, mainpr.head.ref);
     }
     composePRContent(target, main) {
         const title = utils.replacePlaceholders(this.config.pull.title, main, target);
@@ -355,44 +324,6 @@ class Backport {
     }
 }
 exports.Backport = Backport;
-function findTargetBranches(config, labels, headref) {
-    var _a, _b;
-    console.log("Determining target branches...");
-    console.log(`Detected labels on PR: ${labels}`);
-    const targetBranchesFromLabels = findTargetBranchesFromLabels(labels, config);
-    const configuredTargetBranches = (_b = (_a = config.target_branches) === null || _a === void 0 ? void 0 : _a.split(" ").map((t) => t.trim()).filter((t) => t !== "")) !== null && _b !== void 0 ? _b : [];
-    console.log(`Found target branches in labels: ${targetBranchesFromLabels}`);
-    console.log(`Found target branches in \`target_branches\` input: ${configuredTargetBranches}`);
-    console.log(`Exclude pull request's headref from target branches: ${headref}`);
-    const targetBranches = [
-        ...new Set([...targetBranchesFromLabels, ...configuredTargetBranches]),
-    ].filter((t) => t !== headref);
-    console.log(`Determined target branches: ${targetBranches}`);
-    return targetBranches;
-}
-exports.findTargetBranches = findTargetBranches;
-function findTargetBranchesFromLabels(labels, config) {
-    const pattern = config.labels.pattern;
-    if (pattern === undefined) {
-        return [];
-    }
-    return labels
-        .map((label) => {
-        return { label: label, match: pattern.exec(label) };
-    })
-        .filter((result) => {
-        if (!result.match) {
-            console.log(`label '${result.label}' doesn't match \`label_pattern\` '${pattern.source}'`);
-        }
-        else if (result.match.length < 2) {
-            console.error((0, dedent_1.default) `label '${result.label}' matches \`label_pattern\` '${pattern.source}', \
-          but no branchname could be captured. Please make sure to provide a regex with a capture group as \
-          \`label_pattern\`.`);
-        }
-        return !!result.match && result.match.length === 2;
-    })
-        .map((result) => result.match[1]);
-}
 
 
 /***/ }),
@@ -446,12 +377,13 @@ class Git {
      * @param ref the sha, branchname, etc to fetch
      * @param pwd the root of the git repository
      * @param depth the number of commits to fetch
+     * @param remote the remote to fetch from
      * @throws GitRefNotFoundError when ref not found
      * @throws Error for any other non-zero exit code
      */
-    fetch(ref, pwd, depth) {
+    fetch(ref, pwd, depth, remote = "origin") {
         return __awaiter(this, void 0, void 0, function* () {
-            const { exitCode } = yield this.git("fetch", [`--depth=${depth}`, "origin", ref], pwd);
+            const { exitCode } = yield this.git("fetch", [`--depth=${depth}`, remote, ref], pwd);
             if (exitCode === 128) {
                 throw new GitRefNotFoundError(`Expected to fetch '${ref}', but couldn't find it`, ref);
             }
@@ -473,17 +405,33 @@ class Git {
             return mergeCommitShas;
         });
     }
-    push(branchname, pwd) {
+    push(branchname, remote = "origin", pwd) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { exitCode } = yield this.git("push", ["--set-upstream", "origin", branchname], pwd);
+            const { exitCode } = yield this.git("push", ["--set-upstream", remote, branchname], pwd);
             return exitCode;
         });
     }
-    checkout(branch, start, pwd) {
+    /**
+     * Adds a new remote to the Git repository at the specified path.
+     * @param url The URL of the remote repository to add.
+     * @param remote_name The name to give to the new remote. Defaults to "upstream".
+     * @param pwd The path to the Git repository.
+     * @throws An error if the 'git remote add' command fails.
+     */
+    add_remote(url, remote_name = "origin", pwd) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { exitCode } = yield this.git("switch", ["-c", branch, start], pwd);
+            const { exitCode } = yield this.git("remote", ["add", remote_name, url], pwd);
+            // TODO: when defaulting to remote, we can skip this and ignore the errror
             if (exitCode !== 0) {
-                throw new Error(`'git switch -c ${branch} ${start}' failed with exit code ${exitCode}`);
+                throw new Error(`'git remote add ${remote_name} ${url}' failed with exit code ${exitCode}`);
+            }
+        });
+    }
+    checkout(branch, start, remote = "origin", pwd) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { exitCode } = yield this.git("switch", ["-c", branch, `${remote}/${start}`], pwd);
+            if (exitCode !== 0) {
+                throw new Error(`'git switch -c ${branch} ${remote}/${start}' failed with exit code ${exitCode}`);
             }
         });
     }
@@ -732,6 +680,7 @@ function run() {
         const copy_assignees = core.getInput("copy_assignees");
         const copy_milestone = core.getInput("copy_milestone");
         const copy_requested_reviewers = core.getInput("copy_requested_reviewers");
+        const upstream_repo = core.getInput("upstream_repo");
         if (merge_commits != "fail" && merge_commits != "skip") {
             const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
             console.error(message);
@@ -750,6 +699,7 @@ function run() {
             copy_assignees: copy_assignees === "true",
             copy_milestone: copy_milestone === "true",
             copy_requested_reviewers: copy_requested_reviewers === "true",
+            upstream_repo: upstream_repo !== "" ? upstream_repo : undefined,
         };
         const backport = new backport_1.Backport(github, config, git);
         return backport.run();

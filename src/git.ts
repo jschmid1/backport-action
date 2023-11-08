@@ -31,13 +31,19 @@ export class Git {
    * @param ref the sha, branchname, etc to fetch
    * @param pwd the root of the git repository
    * @param depth the number of commits to fetch
+   * @param remote the remote to fetch from
    * @throws GitRefNotFoundError when ref not found
    * @throws Error for any other non-zero exit code
    */
-  public async fetch(ref: string, pwd: string, depth: number) {
+  public async fetch(
+    ref: string,
+    pwd: string,
+    depth: number,
+    remote: string = "origin",
+  ) {
     const { exitCode } = await this.git(
       "fetch",
-      [`--depth=${depth}`, "origin", ref],
+      [`--depth=${depth}`, remote, ref],
       pwd,
     );
     if (exitCode === 128) {
@@ -73,20 +79,58 @@ export class Git {
     return mergeCommitShas;
   }
 
-  public async push(branchname: string, pwd: string) {
+  public async push(
+    branchname: string,
+    remote: string = "origin",
+    pwd: string,
+  ) {
     const { exitCode } = await this.git(
       "push",
-      ["--set-upstream", "origin", branchname],
+      ["--set-upstream", remote, branchname],
       pwd,
     );
     return exitCode;
   }
 
-  public async checkout(branch: string, start: string, pwd: string) {
-    const { exitCode } = await this.git("switch", ["-c", branch, start], pwd);
+  /**
+   * Adds a new remote to the Git repository at the specified path.
+   * @param url The URL of the remote repository to add.
+   * @param remote_name The name to give to the new remote. Defaults to "upstream".
+   * @param pwd The path to the Git repository.
+   * @throws An error if the 'git remote add' command fails.
+   */
+  public async add_remote(
+    url: string,
+    remote_name: string = "origin",
+    pwd: string,
+  ) {
+    const { exitCode } = await this.git(
+      "remote",
+      ["add", remote_name, url],
+      pwd,
+    );
+    // TODO: when defaulting to remote, we can skip this and ignore the errror
     if (exitCode !== 0) {
       throw new Error(
-        `'git switch -c ${branch} ${start}' failed with exit code ${exitCode}`,
+        `'git remote add ${remote_name} ${url}' failed with exit code ${exitCode}`,
+      );
+    }
+  }
+
+  public async checkout(
+    branch: string,
+    start: string,
+    remote: string = "origin",
+    pwd: string,
+  ) {
+    const { exitCode } = await this.git(
+      "switch",
+      ["-c", branch, `${remote}/${start}`],
+      pwd,
+    );
+    if (exitCode !== 0) {
+      throw new Error(
+        `'git switch -c ${branch} ${remote}/${start}' failed with exit code ${exitCode}`,
       );
     }
   }
