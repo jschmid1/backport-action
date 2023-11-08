@@ -179,7 +179,7 @@ class Backport {
                         yield this.git.cherryPick(commitShasToCherryPick, this.config.pwd);
                     }
                     catch (error) {
-                        const message = this.composeMessageForBackportScriptFailure(target, 4, baseref, headref, branchname);
+                        const message = this.composeMessageForBackportScriptFailure(target, 4, baseref, headref, branchname, upstream_name);
                         console.error(message);
                         successByTarget.set(target, false);
                         yield this.github.createComment({
@@ -275,7 +275,7 @@ class Backport {
         return (0, dedent_1.default) `Backport failed for \`${target}\`: couldn't find remote ref \`${target}\`.
                   Please ensure that this Github repo has a branch named \`${target}\`.`;
     }
-    composeMessageForBackportScriptFailure(target, exitcode, baseref, headref, branchname) {
+    composeMessageForBackportScriptFailure(target, exitcode, baseref, headref, branchname, remote = "origin") {
         var _a;
         const reasons = {
             1: "due to an unknown script error",
@@ -288,8 +288,8 @@ class Backport {
         const reason = (_a = reasons[exitcode]) !== null && _a !== void 0 ? _a : "due to an unknown script error";
         const suggestion = exitcode <= 4
             ? (0, dedent_1.default) `\`\`\`bash
-                git fetch origin ${target}
-                git worktree add -d .worktree/${branchname} origin/${target}
+                git fetch ${remote} ${target}
+                git worktree add -d .worktree/${branchname} ${remote}/${target}
                 cd .worktree/${branchname}
                 git checkout -b ${branchname}
                 ancref=$(git merge-base ${baseref} ${headref})
@@ -679,7 +679,7 @@ const execa_1 = __nccwpck_require__(7845);
  */
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
-        const token = core.getInput("github_token", { required: true });
+        const token = core.getInput("token", { required: true });
         const pwd = core.getInput("github_workspace", { required: true });
         const pattern = core.getInput("label_pattern");
         const description = core.getInput("pull_description");

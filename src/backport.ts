@@ -218,6 +218,7 @@ export class Backport {
             baseref,
             headref,
             branchname,
+            upstream_name,
           );
           console.error(message);
           successByTarget.set(target, false);
@@ -342,6 +343,7 @@ export class Backport {
     baseref: string,
     headref: string,
     branchname: string,
+    remote: string = "origin",
   ): string {
     const reasons: { [key: number]: string } = {
       1: "due to an unknown script error",
@@ -356,8 +358,8 @@ export class Backport {
     const suggestion =
       exitcode <= 4
         ? dedent`\`\`\`bash
-                git fetch origin ${target}
-                git worktree add -d .worktree/${branchname} origin/${target}
+                git fetch ${remote} ${target}
+                git worktree add -d .worktree/${branchname} ${remote}/${target}
                 cd .worktree/${branchname}
                 git checkout -b ${branchname}
                 ancref=$(git merge-base ${baseref} ${headref})
