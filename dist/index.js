@@ -189,10 +189,10 @@ class Backport {
                             body: message,
                         });
                     }
-                    console.info(`Push branch to ${upstream_name}`);
+                    console.info(`Push branch ${branchname} to remote ${upstream_name}`);
                     const pushExitCode = yield this.git.push(branchname, upstream_name, this.config.pwd);
                     if (pushExitCode != 0) {
-                        const message = this.composeMessageForGitPushFailure(target, pushExitCode);
+                        const message = this.composeMessageForGitPushFailure(branchname, pushExitCode, upstream_name);
                         console.error(message);
                         successByTarget.set(target, false);
                         yield this.github.createComment({
@@ -302,9 +302,9 @@ class Backport {
                   Please cherry-pick the changes locally.
                   ${suggestion}`;
     }
-    composeMessageForGitPushFailure(target, exitcode) {
+    composeMessageForGitPushFailure(target, exitcode, remote = "origin") {
         //TODO better error messages depending on exit code
-        return (0, dedent_1.default) `Git push to origin failed for ${target} with exitcode ${exitcode}`;
+        return (0, dedent_1.default) `git push to ${remote} failed for ${target} with exitcode ${exitcode}`;
     }
     composeMessageForCreatePRFailed(response) {
         return (0, dedent_1.default) `Backport branch created but failed to create PR.
@@ -362,10 +362,10 @@ class Git {
             console.log(`git ${command} ${args.join(" ")}`);
             const child = this.execa("git", [command, ...args], {
                 cwd: pwd,
-                env: {
-                    GIT_COMMITTER_NAME: "github-actions[bot]",
-                    GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
-                },
+                // env: {
+                //   GIT_COMMITTER_NAME: "github-actions[bot]",
+                //   GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
+                // },
                 reject: false,
             });
             (_a = child.stderr) === null || _a === void 0 ? void 0 : _a.pipe(process.stderr);
@@ -408,7 +408,10 @@ class Git {
     }
     push(branchname, remote = "origin", pwd) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { exitCode } = yield this.git("push", ["-f", remote, branchname], pwd);
+            const { exitCode } = yield this.git("push", ["--set-upstream", remote, branchname], pwd);
+            if (exitCode !== 0) {
+                throw new Error(`'git push --set-upstream ${remote} ${branchname}' failed with exit code ${exitCode}`);
+            }
             return exitCode;
         });
     }
@@ -429,6 +432,7 @@ class Git {
             if (exitCode !== 0) {
                 throw new Error(`'git remote add ${remote_name} ${repo}' failed with exit code ${exitCode}`);
             }
+            return exitCode;
         });
     }
     checkout(branch, start, remote = "origin", pwd) {
@@ -437,6 +441,7 @@ class Git {
             if (exitCode !== 0) {
                 throw new Error(`'git switch -c ${branch} ${remote}/${start}' failed with exit code ${exitCode}`);
             }
+            return exitCode;
         });
     }
     cherryPick(commitShas, pwd) {
@@ -446,6 +451,7 @@ class Git {
                 yield this.git("cherry-pick", ["--abort"], pwd);
                 throw new Error(`'git cherry-pick -x ${commitShas}' failed with exit code ${exitCode}`);
             }
+            return exitCode;
         });
     }
 }

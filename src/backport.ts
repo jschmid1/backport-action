@@ -229,7 +229,7 @@ export class Backport {
           });
         }
 
-        console.info(`Push branch to ${upstream_name}`);
+        console.info(`Push branch ${branchname} to remote ${upstream_name}`);
         const pushExitCode = await this.git.push(
           branchname,
           upstream_name,
@@ -237,8 +237,9 @@ export class Backport {
         );
         if (pushExitCode != 0) {
           const message = this.composeMessageForGitPushFailure(
-            target,
+            branchname,
             pushExitCode,
+            upstream_name,
           );
           console.error(message);
           successByTarget.set(target, false);
@@ -374,9 +375,10 @@ export class Backport {
   private composeMessageForGitPushFailure(
     target: string,
     exitcode: number,
+    remote: string = "origin",
   ): string {
     //TODO better error messages depending on exit code
-    return dedent`Git push to origin failed for ${target} with exitcode ${exitcode}`;
+    return dedent`git push to ${remote} failed for ${target} with exitcode ${exitcode}`;
   }
 
   private composeMessageForCreatePRFailed(

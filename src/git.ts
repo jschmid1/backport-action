@@ -18,10 +18,10 @@ export class Git {
     console.log(`git ${command} ${args.join(" ")}`);
     const child = this.execa("git", [command, ...args], {
       cwd: pwd,
-      env: {
-        GIT_COMMITTER_NAME: "github-actions[bot]",
-        GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
-      },
+      // env: {
+      //   GIT_COMMITTER_NAME: "github-actions[bot]",
+      //   GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
+      // },
       reject: false,
     });
     child.stderr?.pipe(process.stderr);
@@ -89,9 +89,14 @@ export class Git {
   ) {
     const { exitCode } = await this.git(
       "push",
-      ["-f", remote, branchname],
+      ["--set-upstream", remote, branchname],
       pwd,
     );
+    if (exitCode !== 0) {
+      throw new Error(
+        `'git push --set-upstream ${remote} ${branchname}' failed with exit code ${exitCode}`,
+      );
+    }
     return exitCode;
   }
 
@@ -121,6 +126,7 @@ export class Git {
         `'git remote add ${remote_name} ${repo}' failed with exit code ${exitCode}`,
       );
     }
+    return exitCode;
   }
 
   public async checkout(
@@ -139,6 +145,7 @@ export class Git {
         `'git switch -c ${branch} ${remote}/${start}' failed with exit code ${exitCode}`,
       );
     }
+    return exitCode;
   }
 
   public async cherryPick(commitShas: string[], pwd: string) {
@@ -153,5 +160,6 @@ export class Git {
         `'git cherry-pick -x ${commitShas}' failed with exit code ${exitCode}`,
       );
     }
+    return exitCode;
   }
 }
