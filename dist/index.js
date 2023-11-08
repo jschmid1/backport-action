@@ -82,7 +82,7 @@ class Backport {
                 // TODO: this should be configurable, hardcoding for now
                 // This should check the lookup table if there is one, otherwise this will
                 // default to the same name as source branch
-                const target_branches = ["master"];
+                const target_branches = ["main"];
                 if (target_branches.length === 0) {
                     console.log(`Nothing to backport: no 'target_branches' specified and none of the labels match the backport pattern '${(_c = this.config.labels.pattern) === null || _c === void 0 ? void 0 : _c.source}'`);
                     return; // nothing left to do here
@@ -352,8 +352,9 @@ class GitRefNotFoundError extends Error {
 }
 exports.GitRefNotFoundError = GitRefNotFoundError;
 class Git {
-    constructor(execa) {
+    constructor(execa, token) {
         this.execa = execa;
+        this.token = token;
     }
     git(command, args, pwd) {
         var _a;
@@ -413,17 +414,20 @@ class Git {
     }
     /**
      * Adds a new remote to the Git repository at the specified path.
-     * @param url The URL of the remote repository to add.
+     * @param repo The URL of the remote repository to add.
      * @param remote_name The name to give to the new remote. Defaults to "upstream".
      * @param pwd The path to the Git repository.
      * @throws An error if the 'git remote add' command fails.
      */
-    add_remote(url, remote_name = "origin", pwd) {
+    add_remote(repo, remote_name = "origin", pwd) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { exitCode } = yield this.git("remote", ["add", remote_name, url], pwd);
+            // https://[TOKEN]@github.com/[REPO-OWNER]/[REPO-NAME]
+            // TODO: will the token get leaked when someone enables debug logging?
+            var remote_url = `https://${this.token}@github.com/${repo}.git`;
+            const { exitCode } = yield this.git("remote", ["add", remote_name, remote_url], pwd);
             // TODO: when defaulting to remote, we can skip this and ignore the errror
             if (exitCode !== 0) {
-                throw new Error(`'git remote add ${remote_name} ${url}' failed with exit code ${exitCode}`);
+                throw new Error(`'git remote add ${remote_name} ${repo}' failed with exit code ${exitCode}`);
             }
         });
     }
@@ -688,7 +692,7 @@ function run() {
             return;
         }
         const github = new github_1.Github(token);
-        const git = new git_1.Git(execa_1.execa);
+        const git = new git_1.Git(execa_1.execa, token);
         const config = {
             pwd,
             labels: { pattern: pattern === "" ? undefined : new RegExp(pattern) },

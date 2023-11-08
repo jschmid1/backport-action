@@ -9,7 +9,10 @@ export class GitRefNotFoundError extends Error {
 }
 
 export class Git {
-  constructor(private execa: Execa) {}
+  constructor(
+    private execa: Execa,
+    private token: string,
+  ) {}
 
   private async git(command: string, args: string[], pwd: string) {
     console.log(`git ${command} ${args.join(" ")}`);
@@ -94,25 +97,28 @@ export class Git {
 
   /**
    * Adds a new remote to the Git repository at the specified path.
-   * @param url The URL of the remote repository to add.
+   * @param repo The URL of the remote repository to add.
    * @param remote_name The name to give to the new remote. Defaults to "upstream".
    * @param pwd The path to the Git repository.
    * @throws An error if the 'git remote add' command fails.
    */
   public async add_remote(
-    url: string,
+    repo: string,
     remote_name: string = "origin",
     pwd: string,
   ) {
+    // https://[TOKEN]@github.com/[REPO-OWNER]/[REPO-NAME]
+    // TODO: will the token get leaked when someone enables debug logging?
+    var remote_url = `https://${this.token}@github.com/${repo}.git`;
     const { exitCode } = await this.git(
       "remote",
-      ["add", remote_name, url],
+      ["add", remote_name, remote_url],
       pwd,
     );
     // TODO: when defaulting to remote, we can skip this and ignore the errror
     if (exitCode !== 0) {
       throw new Error(
-        `'git remote add ${remote_name} ${url}' failed with exit code ${exitCode}`,
+        `'git remote add ${remote_name} ${repo}' failed with exit code ${exitCode}`,
       );
     }
   }

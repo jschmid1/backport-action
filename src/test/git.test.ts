@@ -1,7 +1,7 @@
 import { Git, GitRefNotFoundError } from "../git";
 import { execa } from "execa";
 
-const git = new Git(execa);
+const git = new Git(execa, "1234");
 let response = { exitCode: 0, stdout: "" };
 
 jest.mock("execa", () => ({

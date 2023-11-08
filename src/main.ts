@@ -31,7 +31,7 @@ async function run(): Promise<void> {
   }
 
   const github = new Github(token);
-  const git = new Git(execa);
+  const git = new Git(execa, token);
   const config: Config = {
     pwd,
     labels: { pattern: pattern === "" ? undefined : new RegExp(pattern) },

@@ -71,7 +71,7 @@ export class Backport {
       // TODO: this should be configurable, hardcoding for now
       // This should check the lookup table if there is one, otherwise this will
       // default to the same name as source branch
-      const target_branches = ["master"];
+      const target_branches = ["main"];
       if (target_branches.length === 0) {
         console.log(
           `Nothing to backport: no 'target_branches' specified and none of the labels match the backport pattern '${this.config.labels.pattern?.source}'`,
