@@ -18,6 +18,7 @@ async function run(): Promise<void> {
   const target_branches = core.getInput("target_branches");
   const merge_commits = core.getInput("merge_commits");
   const upstream_repo = core.getInput("upstream_repo");
+  const branch_map = core.getInput("branch_map");
 
   if (merge_commits != "fail" && merge_commits != "skip") {
     const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
@@ -35,6 +36,7 @@ async function run(): Promise<void> {
     target_branches: target_branches === "" ? undefined : target_branches,
     commits: { merge_commits },
     upstream_repo: upstream_repo !== "" ? upstream_repo : undefined!,
+    branch_map: branch_map !== "" ? JSON.parse(branch_map) : undefined!,
   };
   const backport = new Backport(github, config, git);
 

@@ -67,8 +67,13 @@ class Backport {
                 const repo = (_b = (_a = payload.repository) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : this.github.getRepo().repo;
                 const pull_number = this.github.getPullNumber();
                 const mainpr = yield this.github.getPullRequest(pull_number);
+                // The head_ref or source branch of the pull request in a workflow run. This property is only available when the event that triggers a workflow
                 const headref = mainpr.head.sha;
+                // The base_ref or target branch of the pull request in a workflow run. This property is only available when the event that triggers a workflow
                 const baseref = mainpr.base.sha;
+                const branch_map = this.config.branch_map;
+                // define the upstream name for git remote
+                const upstream_name = "upstream";
                 if (!(yield this.github.isMerged(mainpr))) {
                     const message = "Only merged pull requests can be backported.";
                     this.github.createComment({
@@ -79,14 +84,11 @@ class Backport {
                     });
                     return;
                 }
-                // TODO: this should be configurable, hardcoding for now
-                // This should check the lookup table if there is one, otherwise this will
-                // default to the same name as source branch
-                const target_branches = ["main"];
-                if (target_branches.length === 0) {
-                    console.log(`Nothing to backport: no 'target_branches' specified and none of the labels match the backport pattern '${(_c = this.config.labels.pattern) === null || _c === void 0 ? void 0 : _c.source}'`);
-                    return; // nothing left to do here
-                }
+                //  Determines the target value based on the `baseref` key from the `branch_map` Map object.
+                //  If `baseref` exists as a key in `branch_map`, the corresponding value is used.
+                //  If `baseref` does not exist in `branch_map`, `baseref` itself is used as the target value.
+                //  The result is stored in the `target` constant.
+                const target = (_c = branch_map.get(baseref)) !== null && _c !== void 0 ? _c : baseref;
                 console.log(`Fetching all the commits from the pull request: ${mainpr.commits + 1}`);
                 yield this.git.fetch(`refs/pull/${pull_number}/head`, this.config.pwd, mainpr.commits + 1);
                 const commitShas = yield this.github.getCommits(mainpr);
@@ -115,11 +117,8 @@ class Backport {
                     commitShasToCherryPick = nonMergeCommitShas;
                 }
                 console.log("Will cherry-pick the following commits: " + commitShasToCherryPick);
-                // remote logic starts here
-                // TODO: this should be configurable, hardcoding for now
-                let target = target_branches[0];
                 const successByTarget = new Map();
-                let upstream_name = "upstream";
+                // remote logic starts here
                 console.log(`Backporting to target branch '${target} to remote '${upstream_name}'`);
                 try {
                     yield this.git.add_remote(this.config.upstream_repo, upstream_name, this.config.pwd);
@@ -207,7 +206,7 @@ class Backport {
                     }
                     const [upstream_owner, upstream_repo] = this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
                     console.info(`Create PR for ${branchname}`);
-                    const { title, body } = this.composePRContent(target, mainpr, upstream_owner, upstream_repo);
+                    const { title, body } = this.composePRContent(target, mainpr, owner, repo);
                     const new_pr_response = yield this.github.createPR({
                         owner: upstream_owner,
                         repo: upstream_repo,
@@ -302,8 +301,7 @@ class Backport {
                 ancref=$(git merge-base ${baseref} ${headref})
                 git cherry-pick -x $ancref..${headref}
                 \`\`\``
-            : (0, dedent_1.default) `Note that rebase and squash merges are not supported at this time.
-                For more information see https://github.com/korthout/backport-action/issues/46.`;
+            : (0, dedent_1.default) `Note that rebase and squash merges are not supported at this time.`;
         return (0, dedent_1.default) `Backport failed for \`${target}\`, ${reason}.
 
                   Please cherry-pick the changes locally.
@@ -611,24 +609,6 @@ class Github {
             return __classPrivateFieldGet(this, _Github_octokit, "f").rest.pulls.requestReviewers(request);
         });
     }
-    labelPR(pr, labels) {
-        return __awaiter(this, void 0, void 0, function* () {
-            console.log(`Label PR #${pr} with labels: ${labels}`);
-            return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues.addLabels(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr, labels }));
-        });
-    }
-    setAssignees(pr, assignees) {
-        return __awaiter(this, void 0, void 0, function* () {
-            console.log(`Set Assignees ${assignees} to #${pr}`);
-            return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues.addAssignees(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr, assignees }));
-        });
-    }
-    setMilestone(pr, milestone) {
-        return __awaiter(this, void 0, void 0, function* () {
-            console.log(`Set Milestone ${milestone} to #${pr}`);
-            return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues.update(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr, milestone: milestone }));
-        });
-    }
 }
 exports.Github = Github;
 _Github_octokit = new WeakMap(), _Github_context = new WeakMap();
@@ -691,13 +671,10 @@ function run() {
         const pattern = core.getInput("label_pattern");
         const description = core.getInput("pull_description");
         const title = core.getInput("pull_title");
-        const copy_labels_pattern = core.getInput("copy_labels_pattern");
         const target_branches = core.getInput("target_branches");
         const merge_commits = core.getInput("merge_commits");
-        const copy_assignees = core.getInput("copy_assignees");
-        const copy_milestone = core.getInput("copy_milestone");
-        const copy_requested_reviewers = core.getInput("copy_requested_reviewers");
         const upstream_repo = core.getInput("upstream_repo");
+        const branch_map = core.getInput("branch_map");
         if (merge_commits != "fail" && merge_commits != "skip") {
             const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
             console.error(message);
@@ -710,13 +687,10 @@ function run() {
             pwd,
             labels: { pattern: pattern === "" ? undefined : new RegExp(pattern) },
             pull: { description, title },
-            copy_labels_pattern: copy_labels_pattern === "" ? undefined : new RegExp(copy_labels_pattern),
             target_branches: target_branches === "" ? undefined : target_branches,
             commits: { merge_commits },
-            copy_assignees: copy_assignees === "true",
-            copy_milestone: copy_milestone === "true",
-            copy_requested_reviewers: copy_requested_reviewers === "true",
             upstream_repo: upstream_repo !== "" ? upstream_repo : undefined,
+            branch_map: branch_map !== "" ? JSON.parse(branch_map) : undefined,
         };
         const backport = new backport_1.Backport(github, config, git);
         return backport.run();
@@ -734,7 +708,7 @@ run();
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getMentionedIssueRefs = exports.replacePlaceholders = void 0;
+exports.replacePlaceholders = void 0;
 /**
  * @param template The template potentially containing placeholders
  * @param main The main pull request that is backported
@@ -742,54 +716,15 @@ exports.getMentionedIssueRefs = exports.replacePlaceholders = void 0;
  * @returns Description that can be used in the backport pull request
  */
 function replacePlaceholders(template, main, target, owner = "", repo = "") {
-    const issues = getMentionedIssueRefs(main.body);
     return template
         .replace("${pull_author}", main.user.login)
         .replace("${pull_number}", main.number.toString())
         .replace("${pull_title}", main.title)
         .replace("${target_branch}", target)
-        .replace("${issue_refs}", issues.join(" "))
         .replace("${repo}", repo)
         .replace("${owner}", owner);
 }
 exports.replacePlaceholders = replacePlaceholders;
-/**
- * @param body Text in which to search for mentioned issues
- * @returns All found mentioned issues as GitHub issue references
- */
-function getMentionedIssueRefs(body) {
-    var _a, _b, _c;
-    const issueUrls = (_b = (_a = body === null || body === void 0 ? void 0 : body.match(patterns.url.global)) === null || _a === void 0 ? void 0 : _a.map((url) => toRef(url))) !== null && _b !== void 0 ? _b : [];
-    const issueRefs = (_c = body === null || body === void 0 ? void 0 : body.match(patterns.ref)) !== null && _c !== void 0 ? _c : [];
-    return issueUrls.concat(issueRefs).map((ref) => ref.trim());
-}
-exports.getMentionedIssueRefs = getMentionedIssueRefs;
-const patterns = {
-    // matches urls to github issues at start, middle, end of line as individual word
-    // may be lead and trailed by whitespace which should be trimmed
-    // captures the `org`, `repo` and `number` of the issue
-    // https://regex101.com/r/XKRl8q/5
-    url: {
-        global: /(?:^| )(?:(?:https:\/\/)?(?:www\.)?github\.com\/(?<org>[^ \/\n]+)\/(?<repo>[^ \/\n]+)\/issues\/(?<number>[0-9]+)(?:\/)?)(?: |$)/gm,
-        first: /(?:^| )(?:(?:https:\/\/)?(?:www\.)?github\.com\/(?<org>[^ \/\n]+)\/(?<repo>[^ \/\n]+)\/issues\/(?<number>[0-9]+)(?:\/)?)(?: |$)/m,
-    },
-    // matches `#123` at start, middle, end of line as individual word
-    // may be lead and trailed by whitespace which should be trimmed
-    // captures `number` of the issue (and optionally the `org` and `repo`)
-    // https://regex101.com/r/2gAB8O/2
-    ref: /(?:^| )((?<org>[^\n #\/]+)\/(?<repo>[^\n #\/]+))?#(?<number>[0-9]+)(?: |$)/gm,
-};
-const toRef = (url) => {
-    // matchAll is not yet available to directly access the captured groups of all matches
-    // so this maps the urls to GitHub refs by matching again without the global flag
-    const result = patterns.url.first.exec(url);
-    if (!result) {
-        console.error(`Expected to transform url (${url}) to GitHub reference, but it did not match pattern'`);
-        return "";
-    }
-    const [, org, repo, number] = result;
-    return `${org}/${repo}#${number}`;
-};
 
 
 /***/ }),
