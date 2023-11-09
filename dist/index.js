@@ -362,10 +362,10 @@ class Git {
             console.log(`git ${command} ${args.join(" ")}`);
             const child = this.execa("git", [command, ...args], {
                 cwd: pwd,
-                // env: {
-                //   GIT_COMMITTER_NAME: "github-actions[bot]",
-                //   GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
-                // },
+                env: {
+                    GIT_COMMITTER_NAME: "github-actions[bot]",
+                    GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
+                },
                 reject: false,
             });
             (_a = child.stderr) === null || _a === void 0 ? void 0 : _a.pipe(process.stderr);

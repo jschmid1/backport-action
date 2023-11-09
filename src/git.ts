@@ -18,10 +18,10 @@ export class Git {
     console.log(`git ${command} ${args.join(" ")}`);
     const child = this.execa("git", [command, ...args], {
       cwd: pwd,
-      // env: {
-      //   GIT_COMMITTER_NAME: "github-actions[bot]",
-      //   GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
-      // },
+      env: {
+        GIT_COMMITTER_NAME: "github-actions[bot]",
+        GIT_COMMITTER_EMAIL: "github-actions[bot]@users.noreply.github.com",
+      },
       reject: false,
     });
     child.stderr?.pipe(process.stderr);
