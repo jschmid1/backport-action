@@ -128,6 +128,9 @@ class Backport {
                     if (error instanceof Error) {
                         console.error(error.message);
                         successByTarget.set(target, false);
+                        // TODO: This should not create a comment from the error itself.
+                        // as it potentially leaks information about the remote repo
+                        // (unless this is non-generic error)
                         yield this.github.createComment({
                             owner,
                             repo,
@@ -203,13 +206,14 @@ class Backport {
                         });
                     }
                     console.info(`Create PR for ${branchname}`);
-                    const { title, body } = this.composePRContent(target, mainpr);
+                    const { title, body } = this.composePRContent(target, mainpr, owner, repo);
                     // TODO: source this from the upstream_url config var (or get that form the github api)
                     // let owner = "jschmid1";
                     // let repo = "backport-testing-fork"
+                    const [upstream_owner, upstream_repo] = this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
                     const new_pr_response = yield this.github.createPR({
-                        owner: "jschmid1",
-                        repo: "backport-testing-fork",
+                        owner: upstream_owner,
+                        repo: upstream_repo,
                         title,
                         body,
                         head: branchname,
@@ -228,7 +232,7 @@ class Backport {
                         });
                     }
                     const new_pr = new_pr_response.data;
-                    const message = this.composeMessageForSuccess(new_pr.number, target);
+                    const message = this.composeMessageForSuccess(new_pr.number, target, this.config.upstream_repo);
                     successByTarget.set(target, true);
                     yield this.github.createComment({
                         owner,
@@ -266,8 +270,13 @@ class Backport {
             }
         });
     }
-    composePRContent(target, main) {
-        const title = utils.replacePlaceholders(this.config.pull.title, main, target);
+    extractOwnerRepoFromUpstreamRepo(upstream_repo) {
+        // split the `upstream_repo` into `owner` and `repo`
+        const [owner, repo] = upstream_repo.split("/");
+        return [owner, repo];
+    }
+    composePRContent(target, main, owner, repo) {
+        const title = utils.replacePlaceholders(this.config.pull.title, main, target, owner, repo);
         const body = utils.replacePlaceholders(this.config.pull.description, main, target);
         return { title, body };
     }
@@ -312,9 +321,9 @@ class Backport {
 
                 (see action log for full response)`;
     }
-    composeMessageForSuccess(pr_number, target) {
+    composeMessageForSuccess(pr_number, target, upstream_repo) {
         return (0, dedent_1.default) `Successfully created backport PR for \`${target}\`:
-                  - #${pr_number}`;
+                  - https://github.com/${upstream_repo}/pull/${pr_number}`;
     }
     createOutput(successByTarget) {
         const anyTargetFailed = Array.from(successByTarget.values()).includes(false);
@@ -734,14 +743,16 @@ exports.getMentionedIssueRefs = exports.replacePlaceholders = void 0;
  * @param target The target branchname
  * @returns Description that can be used in the backport pull request
  */
-function replacePlaceholders(template, main, target) {
+function replacePlaceholders(template, main, target, owner = "", repo = "") {
     const issues = getMentionedIssueRefs(main.body);
     return template
         .replace("${pull_author}", main.user.login)
         .replace("${pull_number}", main.number.toString())
         .replace("${pull_title}", main.title)
         .replace("${target_branch}", target)
-        .replace("${issue_refs}", issues.join(" "));
+        .replace("${issue_refs}", issues.join(" "))
+        .replace("${repo}", repo)
+        .replace("${owner}", owner);
 }
 exports.replacePlaceholders = replacePlaceholders;
 /**

@@ -266,7 +266,7 @@ export class Backport {
         // TODO: source this from the upstream_url config var (or get that form the github api)
         // let owner = "jschmid1";
         // let repo = "backport-testing-fork"
-        const { upstream_owner, upstream_repo } =
+        const [upstream_owner, upstream_repo] =
           this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
         const new_pr_response = await this.github.createPR({
           owner: upstream_owner,
