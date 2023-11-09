@@ -255,19 +255,17 @@ export class Backport {
           });
         }
 
+        const [upstream_owner, upstream_repo] =
+          this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
+
         console.info(`Create PR for ${branchname}`);
         const { title, body } = this.composePRContent(
           target,
           mainpr,
-          owner,
-          repo,
+          upstream_owner,
+          upstream_repo,
         );
 
-        // TODO: source this from the upstream_url config var (or get that form the github api)
-        // let owner = "jschmid1";
-        // let repo = "backport-testing-fork"
-        const [upstream_owner, upstream_repo] =
-          this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
         const new_pr_response = await this.github.createPR({
           owner: upstream_owner,
           repo: upstream_repo,
@@ -337,6 +335,7 @@ export class Backport {
   ): [string, string] {
     // split the `upstream_repo` into `owner` and `repo`
     const [owner, repo] = upstream_repo.split("/");
+    console.log(`owner: ${owner}, repo: ${repo}`);
     return [owner, repo];
   }
 
