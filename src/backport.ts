@@ -151,6 +151,9 @@ export class Backport {
         if (error instanceof Error) {
           console.error(error.message);
           successByTarget.set(target, false);
+          // TODO: This should not create a comment from the error itself.
+          // as it potentially leaks information about the remote repo
+          // (unless this is non-generic error)
           await this.github.createComment({
             owner,
             repo,
@@ -253,14 +256,21 @@ export class Backport {
         }
 
         console.info(`Create PR for ${branchname}`);
-        const { title, body } = this.composePRContent(target, mainpr);
+        const { title, body } = this.composePRContent(
+          target,
+          mainpr,
+          owner,
+          repo,
+        );
 
         // TODO: source this from the upstream_url config var (or get that form the github api)
         // let owner = "jschmid1";
         // let repo = "backport-testing-fork"
+        const { upstream_owner, upstream_repo } =
+          this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
         const new_pr_response = await this.github.createPR({
-          owner: "jschmid1",
-          repo: "backport-testing-fork",
+          owner: upstream_owner,
+          repo: upstream_repo,
           title,
           body,
           head: branchname,
@@ -281,7 +291,11 @@ export class Backport {
         }
         const new_pr = new_pr_response.data;
 
-        const message = this.composeMessageForSuccess(new_pr.number, target);
+        const message = this.composeMessageForSuccess(
+          new_pr.number,
+          target,
+          this.config.upstream_repo,
+        );
         successByTarget.set(target, true);
         await this.github.createComment({
           owner,
@@ -318,11 +332,26 @@ export class Backport {
     }
   }
 
-  private composePRContent(target: string, main: PullRequest): PRContent {
+  private extractOwnerRepoFromUpstreamRepo(
+    upstream_repo: string,
+  ): [string, string] {
+    // split the `upstream_repo` into `owner` and `repo`
+    const [owner, repo] = upstream_repo.split("/");
+    return [owner, repo];
+  }
+
+  private composePRContent(
+    target: string,
+    main: PullRequest,
+    owner: string,
+    repo: string,
+  ): PRContent {
     const title = utils.replacePlaceholders(
       this.config.pull.title,
       main,
       target,
+      owner,
+      repo,
     );
     const body = utils.replacePlaceholders(
       this.config.pull.description,
@@ -392,9 +421,13 @@ export class Backport {
                 (see action log for full response)`;
   }
 
-  private composeMessageForSuccess(pr_number: number, target: string) {
+  private composeMessageForSuccess(
+    pr_number: number,
+    target: string,
+    upstream_repo: string,
+  ) {
     return dedent`Successfully created backport PR for \`${target}\`:
-                  - #${pr_number}`;
+                  - https://github.com/${upstream_repo}/pull/${pr_number}`;
   }
 
   private createOutput(successByTarget: Map<string, boolean>) {

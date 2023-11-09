@@ -10,6 +10,8 @@ export function replacePlaceholders(
   template: string,
   main: Pick<PullRequest, "body" | "user" | "number" | "title">,
   target: string,
+  owner: string = "",
+  repo: string = "",
 ): string {
   const issues = getMentionedIssueRefs(main.body);
   return template
@@ -17,7 +19,9 @@ export function replacePlaceholders(
     .replace("${pull_number}", main.number.toString())
     .replace("${pull_title}", main.title)
     .replace("${target_branch}", target)
-    .replace("${issue_refs}", issues.join(" "));
+    .replace("${issue_refs}", issues.join(" "))
+    .replace("${repo}", repo)
+    .replace("${owner}", owner);
 }
 
 /**
