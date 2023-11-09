@@ -1,7 +1,7 @@
-name: Backport merged pull requests to selected branches
+name: Cross Fork Cherry-Pick
 description: >
-  Fast and flexible action to cherry-pick commits from labeled pull requests
-author: korthout
+  Cross fork cherry-picks
+author: jschmid1
 inputs:
   token:
     description: >
@@ -48,8 +48,8 @@ inputs:
       By default, the action will backport to the same repository as the merged pull request.
   branch_map:
     description: >
-      A mapping of target branches to upstream branches in case they are different.
-    default: {}
+      A json-formatted mapping of target branches to upstream branches in case they are different.
+    default: "{}"
 outputs:
   was_successful:
     description: >
