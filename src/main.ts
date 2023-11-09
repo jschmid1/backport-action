@@ -37,7 +37,9 @@ async function run(): Promise<void> {
     commits: { merge_commits },
     upstream_repo: upstream_repo !== "" ? upstream_repo : undefined!,
     branch_map:
-      branch_map !== "" ? JSON.parse(branch_map) : new Map<string, string>(),
+      branch_map !== ""
+        ? new Map<string, string>(Object.entries(JSON.parse(branch_map)))
+        : new Map<string, string>(),
   };
   const backport = new Backport(github, config, git);
 

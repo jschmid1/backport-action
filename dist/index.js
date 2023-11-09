@@ -690,7 +690,9 @@ function run() {
             target_branches: target_branches === "" ? undefined : target_branches,
             commits: { merge_commits },
             upstream_repo: upstream_repo !== "" ? upstream_repo : undefined,
-            branch_map: branch_map !== "" ? JSON.parse(branch_map) : new Map(),
+            branch_map: branch_map !== ""
+                ? new Map(Object.entries(JSON.parse(branch_map)))
+                : new Map(),
         };
         const backport = new backport_1.Backport(github, config, git);
         return backport.run();
