@@ -356,6 +356,8 @@ export class Backport {
       this.config.pull.description,
       main,
       target,
+      owner,
+      repo,
     );
     return { title, body };
   }

@@ -275,7 +275,7 @@ class Backport {
     }
     composePRContent(target, main, owner, repo) {
         const title = utils.replacePlaceholders(this.config.pull.title, main, target, owner, repo);
-        const body = utils.replacePlaceholders(this.config.pull.description, main, target);
+        const body = utils.replacePlaceholders(this.config.pull.description, main, target, owner, repo);
         return { title, body };
     }
     composeMessageForFetchTargetFailure(target) {
