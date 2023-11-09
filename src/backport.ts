@@ -194,6 +194,8 @@ export class Backport {
             baseref,
             headref,
             branchname,
+            upstream_name,
+            this.config.upstream_repo,
           );
           console.error(message);
           successByTarget.set(target, false);
@@ -215,6 +217,7 @@ export class Backport {
             headref,
             branchname,
             upstream_name,
+            this.config.upstream_repo,
           );
           console.error(message);
           successByTarget.set(target, false);
@@ -282,6 +285,22 @@ export class Backport {
         }
         const new_pr = new_pr_response.data;
 
+        const reviewer = mainpr.merged_by.login;
+        if (reviewer) {
+          console.info("Setting reviewer " + reviewer);
+          const reviewRequest = {
+            owner: upstream_owner,
+            repo: upstream_repo,
+            pull_number: new_pr.number,
+            reviewers: [reviewer],
+          };
+          const set_reviewers_response =
+            await this.github.requestReviewers(reviewRequest);
+          if (set_reviewers_response.status != 201) {
+            console.error(JSON.stringify(set_reviewers_response));
+          }
+        }
+
         const message = this.composeMessageForSuccess(
           new_pr.number,
           target,
@@ -328,7 +347,7 @@ export class Backport {
   ): [string, string] {
     // split the `upstream_repo` into `owner` and `repo`
     const [owner, repo] = upstream_repo.split("/");
-    console.log(`owner: ${owner}, repo: ${repo}`);
+    console.debug(`owner: ${owner}, repo: ${repo}`);
     return [owner, repo];
   }
 
@@ -367,6 +386,7 @@ export class Backport {
     headref: string,
     branchname: string,
     remote: string = "origin",
+    upstream_repo: string,
   ): string {
     const reasons: { [key: number]: string } = {
       1: "due to an unknown script error",
@@ -381,6 +401,7 @@ export class Backport {
     const suggestion =
       exitcode <= 4
         ? dedent`\`\`\`bash
+                git remote add ${remote} https://github.com/${upstream_repo}
                 git fetch ${remote} ${target}
                 git worktree add -d .worktree/${branchname} ${remote}/${target}
                 cd .worktree/${branchname}

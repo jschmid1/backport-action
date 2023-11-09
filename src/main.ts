@@ -17,7 +17,7 @@ async function run(): Promise<void> {
   const title = core.getInput("pull_title");
   const target_branches = core.getInput("target_branches");
   const merge_commits = core.getInput("merge_commits");
-  const upstream_repo = core.getInput("upstream_repo");
+  const upstream_repo = core.getInput("upstream_repo", { required: true });
   const branch_map = core.getInput("branch_map");
 
   if (merge_commits != "fail" && merge_commits != "skip") {

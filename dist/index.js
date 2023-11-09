@@ -168,7 +168,7 @@ class Backport {
                         yield this.git.checkout(branchname, target, upstream_name, this.config.pwd);
                     }
                     catch (error) {
-                        const message = this.composeMessageForBackportScriptFailure(target, 3, baseref, headref, branchname);
+                        const message = this.composeMessageForBackportScriptFailure(target, 3, baseref, headref, branchname, upstream_name, this.config.upstream_repo);
                         console.error(message);
                         successByTarget.set(target, false);
                         yield this.github.createComment({
@@ -182,7 +182,7 @@ class Backport {
                         yield this.git.cherryPick(commitShasToCherryPick, this.config.pwd);
                     }
                     catch (error) {
-                        const message = this.composeMessageForBackportScriptFailure(target, 4, baseref, headref, branchname, upstream_name);
+                        const message = this.composeMessageForBackportScriptFailure(target, 4, baseref, headref, branchname, upstream_name, this.config.upstream_repo);
                         console.error(message);
                         successByTarget.set(target, false);
                         yield this.github.createComment({
@@ -229,6 +229,20 @@ class Backport {
                         });
                     }
                     const new_pr = new_pr_response.data;
+                    const reviewer = mainpr.merged_by.login;
+                    if (reviewer) {
+                        console.info("Setting reviewer " + reviewer);
+                        const reviewRequest = {
+                            owner: upstream_owner,
+                            repo: upstream_repo,
+                            pull_number: new_pr.number,
+                            reviewers: [reviewer],
+                        };
+                        const set_reviewers_response = yield this.github.requestReviewers(reviewRequest);
+                        if (set_reviewers_response.status != 201) {
+                            console.error(JSON.stringify(set_reviewers_response));
+                        }
+                    }
                     const message = this.composeMessageForSuccess(new_pr.number, target, this.config.upstream_repo);
                     successByTarget.set(target, true);
                     yield this.github.createComment({
@@ -270,7 +284,7 @@ class Backport {
     extractOwnerRepoFromUpstreamRepo(upstream_repo) {
         // split the `upstream_repo` into `owner` and `repo`
         const [owner, repo] = upstream_repo.split("/");
-        console.log(`owner: ${owner}, repo: ${repo}`);
+        console.debug(`owner: ${owner}, repo: ${repo}`);
         return [owner, repo];
     }
     composePRContent(target, main, owner, repo) {
@@ -282,7 +296,7 @@ class Backport {
         return (0, dedent_1.default) `Backport failed for \`${target}\`: couldn't find remote ref \`${target}\`.
                   Please ensure that this Github repo has a branch named \`${target}\`.`;
     }
-    composeMessageForBackportScriptFailure(target, exitcode, baseref, headref, branchname, remote = "origin") {
+    composeMessageForBackportScriptFailure(target, exitcode, baseref, headref, branchname, remote = "origin", upstream_repo) {
         var _a;
         const reasons = {
             1: "due to an unknown script error",
@@ -295,6 +309,7 @@ class Backport {
         const reason = (_a = reasons[exitcode]) !== null && _a !== void 0 ? _a : "due to an unknown script error";
         const suggestion = exitcode <= 4
             ? (0, dedent_1.default) `\`\`\`bash
+                git remote add ${remote} https://github.com/${upstream_repo}
                 git fetch ${remote} ${target}
                 git worktree add -d .worktree/${branchname} ${remote}/${target}
                 cd .worktree/${branchname}
@@ -674,7 +689,7 @@ function run() {
         const title = core.getInput("pull_title");
         const target_branches = core.getInput("target_branches");
         const merge_commits = core.getInput("merge_commits");
-        const upstream_repo = core.getInput("upstream_repo");
+        const upstream_repo = core.getInput("upstream_repo", { required: true });
         const branch_map = core.getInput("branch_map");
         if (merge_commits != "fail" && merge_commits != "skip") {
             const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
