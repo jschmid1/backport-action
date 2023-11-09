@@ -74,7 +74,7 @@ export class Backport {
       //  If `baseref` exists as a key in `branch_map`, the corresponding value is used.
       //  If `baseref` does not exist in `branch_map`, `baseref` itself is used as the target value.
       //  The result is stored in the `target` constant.
-      const target = branch_map.get(baseref) ?? baseref;
+      const target = branch_map.get(mainpr.base.ref) ?? mainpr.base.ref;
 
       console.log(
         `Fetching all the commits from the pull request: ${mainpr.commits + 1}`,

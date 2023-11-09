@@ -128,6 +128,7 @@ export type PullRequest = {
   };
   base: {
     sha: string;
+    ref: string;
   };
   user: {
     login: string;
