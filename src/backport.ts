@@ -20,15 +20,12 @@ export type Config = {
     description: string;
     title: string;
   };
-  copy_labels_pattern?: RegExp;
   target_branches?: string;
   commits: {
     merge_commits: "fail" | "skip";
   };
-  copy_milestone: boolean;
-  copy_assignees: boolean;
-  copy_requested_reviewers: boolean;
   upstream_repo: string;
+  branch_map: Map<string, string>;
 };
 
 enum Output {
@@ -54,8 +51,13 @@ export class Backport {
       const repo = payload.repository?.name ?? this.github.getRepo().repo;
       const pull_number = this.github.getPullNumber();
       const mainpr = await this.github.getPullRequest(pull_number);
+      // The head_ref or source branch of the pull request in a workflow run. This property is only available when the event that triggers a workflow
       const headref = mainpr.head.sha;
+      // The base_ref or target branch of the pull request in a workflow run. This property is only available when the event that triggers a workflow
       const baseref = mainpr.base.sha;
+      const branch_map = this.config.branch_map;
+      // define the upstream name for git remote
+      const upstream_name = "upstream";
 
       if (!(await this.github.isMerged(mainpr))) {
         const message = "Only merged pull requests can be backported.";
@@ -68,16 +70,11 @@ export class Backport {
         return;
       }
 
-      // TODO: this should be configurable, hardcoding for now
-      // This should check the lookup table if there is one, otherwise this will
-      // default to the same name as source branch
-      const target_branches = ["main"];
-      if (target_branches.length === 0) {
-        console.log(
-          `Nothing to backport: no 'target_branches' specified and none of the labels match the backport pattern '${this.config.labels.pattern?.source}'`,
-        );
-        return; // nothing left to do here
-      }
+      //  Determines the target value based on the `baseref` key from the `branch_map` Map object.
+      //  If `baseref` exists as a key in `branch_map`, the corresponding value is used.
+      //  If `baseref` does not exist in `branch_map`, `baseref` itself is used as the target value.
+      //  The result is stored in the `target` constant.
+      const target = branch_map.get(baseref) ?? baseref;
 
       console.log(
         `Fetching all the commits from the pull request: ${mainpr.commits + 1}`,
@@ -130,14 +127,9 @@ export class Backport {
         "Will cherry-pick the following commits: " + commitShasToCherryPick,
       );
 
-      // remote logic starts here
-
-      // TODO: this should be configurable, hardcoding for now
-      let target = target_branches[0];
-
       const successByTarget = new Map<string, boolean>();
 
-      let upstream_name = "upstream";
+      // remote logic starts here
       console.log(
         `Backporting to target branch '${target} to remote '${upstream_name}'`,
       );
@@ -262,8 +254,8 @@ export class Backport {
         const { title, body } = this.composePRContent(
           target,
           mainpr,
-          upstream_owner,
-          upstream_repo,
+          owner,
+          repo,
         );
 
         const new_pr_response = await this.github.createPR({
@@ -395,8 +387,7 @@ export class Backport {
                 ancref=$(git merge-base ${baseref} ${headref})
                 git cherry-pick -x $ancref..${headref}
                 \`\`\``
-        : dedent`Note that rebase and squash merges are not supported at this time.
-                For more information see https://github.com/korthout/backport-action/issues/46.`;
+        : dedent`Note that rebase and squash merges are not supported at this time.`;
 
     return dedent`Backport failed for \`${target}\`, ${reason}.
 

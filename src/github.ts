@@ -18,10 +18,7 @@ export interface GithubApi {
   isMerged(pull: PullRequest): Promise<boolean>;
   getCommits(pull: PullRequest): Promise<string[]>;
   createPR(pr: CreatePullRequest): Promise<CreatePullRequestResponse>;
-  labelPR(pr: number, labels: string[]): Promise<LabelPullRequestResponse>;
   requestReviewers(request: ReviewRequest): Promise<RequestReviewersResponse>;
-  setAssignees(pr: number, assignees: string[]): Promise<GenericResponse>;
-  setMilestone(pr: number, milestone: number): Promise<GenericResponse>;
 }
 
 export class Github implements GithubApi {
@@ -118,33 +115,6 @@ export class Github implements GithubApi {
   public async requestReviewers(request: ReviewRequest) {
     console.log(`Request reviewers: ${request.reviewers}`);
     return this.#octokit.rest.pulls.requestReviewers(request);
-  }
-
-  public async labelPR(pr: number, labels: string[]) {
-    console.log(`Label PR #${pr} with labels: ${labels}`);
-    return this.#octokit.rest.issues.addLabels({
-      ...this.getRepo(),
-      issue_number: pr,
-      labels,
-    });
-  }
-
-  public async setAssignees(pr: number, assignees: string[]) {
-    console.log(`Set Assignees ${assignees} to #${pr}`);
-    return this.#octokit.rest.issues.addAssignees({
-      ...this.getRepo(),
-      issue_number: pr,
-      assignees,
-    });
-  }
-
-  public async setMilestone(pr: number, milestone: number) {
-    console.log(`Set Milestone ${milestone} to #${pr}`);
-    return this.#octokit.rest.issues.update({
-      ...this.getRepo(),
-      issue_number: pr,
-      milestone: milestone,
-    });
   }
 }
 
