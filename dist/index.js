@@ -88,6 +88,7 @@ class Backport {
                 //  If `baseref` exists as a key in `branch_map`, the corresponding value is used.
                 //  If `baseref` does not exist in `branch_map`, `baseref` itself is used as the target value.
                 //  The result is stored in the `target` constant.
+                console.log(branch_map);
                 const target = (_c = branch_map.get(mainpr.base.ref)) !== null && _c !== void 0 ? _c : mainpr.base.ref;
                 console.log(`Fetching all the commits from the pull request: ${mainpr.commits + 1}`);
                 yield this.git.fetch(`refs/pull/${pull_number}/head`, this.config.pwd, mainpr.commits + 1);

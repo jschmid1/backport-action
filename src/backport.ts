@@ -74,6 +74,7 @@ export class Backport {
       //  If `baseref` exists as a key in `branch_map`, the corresponding value is used.
       //  If `baseref` does not exist in `branch_map`, `baseref` itself is used as the target value.
       //  The result is stored in the `target` constant.
+      console.log(branch_map);
       const target = branch_map.get(mainpr.base.ref) ?? mainpr.base.ref;
 
       console.log(
