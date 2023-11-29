@@ -45,6 +45,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.findTargetBranches = exports.Backport = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const dedent_1 = __importDefault(__nccwpck_require__(5281));
+const github_1 = __nccwpck_require__(5928);
 const git_1 = __nccwpck_require__(3374);
 const utils = __importStar(__nccwpck_require__(918));
 var Output;
@@ -59,7 +60,7 @@ class Backport {
         this.git = git;
     }
     run() {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g;
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const payload = this.github.getPayload();
@@ -85,10 +86,39 @@ class Backport {
                 console.log(`Fetching all the commits from the pull request: ${mainpr.commits + 1}`);
                 yield this.git.fetch(`refs/pull/${pull_number}/head`, this.config.pwd, mainpr.commits + 1);
                 const commitShas = yield this.github.getCommits(mainpr);
-                console.log(`Found commits: ${commitShas}`);
+                let commitShasToCherryPick;
+                if (this.config.detect_merge_method) {
+                    // switch case to check if it is a squash, rebase, or merge commit
+                    switch (yield this.github.mergeStrategy(mainpr)) {
+                        case github_1.MergeStrategy.SQUASHED:
+                            commitShasToCherryPick = (_d = [
+                                yield this.github.getMergeCommitSha(mainpr),
+                            ]) === null || _d === void 0 ? void 0 : _d.filter(Boolean);
+                            break;
+                        case github_1.MergeStrategy.REBASED:
+                            commitShasToCherryPick = commitShas;
+                            break;
+                        case github_1.MergeStrategy.MERGECOMMIT:
+                            commitShasToCherryPick = commitShas;
+                            break;
+                        case github_1.MergeStrategy.UNKNOWN:
+                            console.log("Could not detect merge strategy. Using commits from the Pull Request.");
+                            commitShasToCherryPick = commitShas;
+                            break;
+                        default:
+                            console.log("Could not detect merge strategy. Using commits from the Pull Request.");
+                            commitShasToCherryPick = commitShas;
+                            break;
+                    }
+                }
+                else {
+                    console.log("Not detecting merge strategy. Using commits from the Pull Request.");
+                    commitShasToCherryPick = commitShas;
+                }
+                console.log(`Found commits to backport: ${commitShasToCherryPick}`);
                 console.log("Checking the merged pull request for merge commits");
                 const mergeCommitShas = yield this.git.findMergeCommits(commitShas, this.config.pwd);
-                console.log(`Encountered ${(_d = mergeCommitShas.length) !== null && _d !== void 0 ? _d : "no"} merge commits`);
+                console.log(`Encountered ${(_e = mergeCommitShas.length) !== null && _e !== void 0 ? _e : "no"} merge commits`);
                 if (mergeCommitShas.length > 0 &&
                     this.config.commits.merge_commits == "fail") {
                     const message = (0, dedent_1.default) `Backport failed because this pull request contains merge commits. \
@@ -102,7 +132,6 @@ class Backport {
                     });
                     return;
                 }
-                let commitShasToCherryPick = commitShas;
                 if (mergeCommitShas.length > 0 &&
                     this.config.commits.merge_commits == "skip") {
                     console.log("Skipping merge commits: " + mergeCommitShas);
@@ -124,7 +153,7 @@ class Backport {
                 for (const target of target_branches) {
                     console.log(`Backporting to target branch '${target}...'`);
                     try {
-                        yield this.git.fetch(target, this.config.pwd, 1);
+                        yield this.git.fetch(target, this.config.pwd, 2);
                     }
                     catch (error) {
                         if (error instanceof git_1.GitRefNotFoundError) {
@@ -215,7 +244,7 @@ class Backport {
                         }
                         const new_pr = new_pr_response.data;
                         if (this.config.copy_milestone == true) {
-                            const milestone = (_e = mainpr.milestone) === null || _e === void 0 ? void 0 : _e.number;
+                            const milestone = (_f = mainpr.milestone) === null || _f === void 0 ? void 0 : _f.number;
                             if (milestone) {
                                 console.info("Setting milestone to " + milestone);
                                 const set_milestone_response = yield this.github.setMilestone(new_pr.number, milestone);
@@ -235,7 +264,7 @@ class Backport {
                             }
                         }
                         if (this.config.copy_requested_reviewers == true) {
-                            const reviewers = (_f = mainpr.requested_reviewers) === null || _f === void 0 ? void 0 : _f.map((reviewer) => reviewer.login);
+                            const reviewers = (_g = mainpr.requested_reviewers) === null || _g === void 0 ? void 0 : _g.map((reviewer) => reviewer.login);
                             if ((reviewers === null || reviewers === void 0 ? void 0 : reviewers.length) > 0) {
                                 console.info("Setting reviewers " + reviewers);
                                 const reviewRequest = Object.assign(Object.assign({}, this.github.getRepo()), { pull_number: new_pr.number, reviewers: reviewers });
@@ -556,7 +585,7 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
 };
 var _Github_octokit, _Github_context;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Github = void 0;
+exports.MergeStrategy = exports.Github = void 0;
 const github = __importStar(__nccwpck_require__(5438));
 class Github {
     constructor(token) {
@@ -660,9 +689,162 @@ class Github {
             return __classPrivateFieldGet(this, _Github_octokit, "f").rest.issues.update(Object.assign(Object.assign({}, this.getRepo()), { issue_number: pr, milestone: milestone }));
         });
     }
+    /**
+     * Retrieves the SHA of the merge commit for a given pull request.
+     * @param pull - The pull request object.
+     * @returns The SHA of the merge commit.
+     */
+    getMergeCommitSha(pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return pull.merge_commit_sha;
+        });
+    }
+    /**
+     * Retrieves a commit from the repository.
+     * @param sha - The SHA of the commit to retrieve.
+     * @returns A promise that resolves to the retrieved commit.
+     */
+    getCommit(sha) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const commit = __classPrivateFieldGet(this, _Github_octokit, "f").rest.repos.getCommit(Object.assign(Object.assign({}, this.getRepo()), { ref: sha }));
+            return commit;
+        });
+    }
+    /**
+     * Retrieves the parents of a commit.
+     * @param sha - The SHA of the commit.
+     * @returns A promise that resolves to the parents of the commit.
+     */
+    getParents(sha) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const commit = yield this.getCommit(sha);
+            return commit.data.parents;
+        });
+    }
+    /**
+     * Retrieves the pull requests associated with a specific commit.
+     * @param sha The SHA of the commit.
+     * @returns A promise that resolves to the pull requests associated with the commit.
+     */
+    getPullRequestsAssociatedWithCommit(sha) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const pr = __classPrivateFieldGet(this, _Github_octokit, "f").rest.repos.listPullRequestsAssociatedWithCommit(Object.assign(Object.assign({}, this.getRepo()), { commit_sha: sha }));
+            return pr;
+        });
+    }
+    /**
+     * Checks if a given SHA is associated with a specific pull request.
+     * @param sha - The SHA of the commit.
+     * @param pull - The pull request to check against.
+     * @returns A boolean indicating whether the SHA is associated with the pull request.
+     */
+    isShaAssociatedWithPullRequest(sha, pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const assoc_pr = yield this.getPullRequestsAssociatedWithCommit(sha);
+            const assoc_pr_data = assoc_pr.data;
+            // commits can be associated with multiple PRs
+            // checks if any of the assoc_prs is the same as the pull
+            return assoc_pr_data.some((pr) => pr.number == pull.number);
+        });
+    }
+    /**
+     * Retrieves the merge commit SHA and its parents for a given pull request.
+     * @param pull The pull request object.
+     * @returns An object containing the merge commit SHA and its parents, or null if the merge commit is not found.
+     */
+    getMergeCommitShaAndParents(pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const merge_commit_sha = yield this.getMergeCommitSha(pull);
+            if (!merge_commit_sha) {
+                console.log("likely not merged yet.");
+                return null;
+            }
+            const parents = yield this.getParents(merge_commit_sha);
+            return { merge_commit_sha, parents };
+        });
+    }
+    /**
+     * Checks if a commit is a merge commit.
+     * @param parents - An array of parent commit hashes.
+     * @returns A promise that resolves to a boolean indicating whether the commit is a merge commit.
+     */
+    isMergeCommit(parents) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return parents.length > 1;
+        });
+    }
+    /**
+     * Checks if a pull request is rebased.
+     * @param first_parent_belongs_to_pr - Indicates if the parent belongs to a pull request.
+     * @param merge_belongs_to_pr - Indicates if the merge belongs to a pull request.
+     * @param pull - The pull request object.
+     * @returns A boolean value indicating if the pull request is rebased.
+     */
+    isRebased(first_parent_belongs_to_pr, merge_belongs_to_pr, pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return first_parent_belongs_to_pr && merge_belongs_to_pr;
+        });
+    }
+    /**
+     * Checks if a merge commit is squashed.
+     * @param first_parent_belongs_to_pr - Indicates if the parent commit belongs to a pull request.
+     * @param merge_belongs_to_pr - Indicates if the merge commit belongs to a pull request.
+     * @returns A boolean value indicating if the merge commit is squashed.
+     */
+    isSquashed(first_parent_belongs_to_pr, merge_belongs_to_pr) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return !first_parent_belongs_to_pr && merge_belongs_to_pr;
+        });
+    }
+    /**
+     * Determines the merge strategy used for a given pull request.
+     *
+     * @param pull - The pull request to analyze.
+     * @returns The merge strategy used for the pull request.
+     */
+    mergeStrategy(pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const result = yield this.getMergeCommitShaAndParents(pull);
+            if (!result)
+                return null;
+            const { merge_commit_sha, parents } = result;
+            if (yield this.isMergeCommit(parents)) {
+                console.log("PR was merged using a merge commit");
+                return MergeStrategy.MERGECOMMIT;
+            }
+            // if there is only one commit, it is a rebase OR a squash but we treat it
+            // as a squash.
+            if (pull.commits == 1) {
+                console.log("PR was merged using a squash or a rebase. Choosing squash strategy.");
+                return MergeStrategy.SQUASHED;
+            }
+            // Prepare the data for the rebase and squash checks.
+            const first_parent_sha = parents[0].sha;
+            const first_parent_belonts_to_pr = yield this.isShaAssociatedWithPullRequest(first_parent_sha, pull);
+            const merge_belongs_to_pr = yield this.isShaAssociatedWithPullRequest(merge_commit_sha, pull);
+            // This is the case when the PR is merged using a rebase.
+            // and has multiple commits.
+            if (yield this.isRebased(first_parent_belonts_to_pr, merge_belongs_to_pr, pull)) {
+                console.log("PR was merged using a rebase");
+                return MergeStrategy.REBASED;
+            }
+            if (yield this.isSquashed(first_parent_belonts_to_pr, merge_belongs_to_pr)) {
+                console.log("PR was merged using a squash");
+                return MergeStrategy.SQUASHED;
+            }
+            return MergeStrategy.UNKNOWN;
+        });
+    }
 }
 exports.Github = Github;
 _Github_octokit = new WeakMap(), _Github_context = new WeakMap();
+var MergeStrategy;
+(function (MergeStrategy) {
+    MergeStrategy["SQUASHED"] = "squashed";
+    MergeStrategy["REBASED"] = "rebased";
+    MergeStrategy["MERGECOMMIT"] = "mergecommit";
+    MergeStrategy["UNKNOWN"] = "unknown";
+})(MergeStrategy = exports.MergeStrategy || (exports.MergeStrategy = {}));
 
 
 /***/ }),
@@ -728,6 +910,7 @@ function run() {
         const copy_assignees = core.getInput("copy_assignees");
         const copy_milestone = core.getInput("copy_milestone");
         const copy_requested_reviewers = core.getInput("copy_requested_reviewers");
+        const detect_merge_method = core.getInput("detect_merge_method");
         if (merge_commits != "fail" && merge_commits != "skip") {
             const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
             console.error(message);
@@ -746,6 +929,7 @@ function run() {
             copy_assignees: copy_assignees === "true",
             copy_milestone: copy_milestone === "true",
             copy_requested_reviewers: copy_requested_reviewers === "true",
+            detect_merge_method: detect_merge_method === "true",
         };
         const backport = new backport_1.Backport(github, config, git);
         return backport.run();
